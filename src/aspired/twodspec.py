@@ -160,7 +160,7 @@ class TwoDSpec:
         self.readnoise_is_default_value = True
         self.gain_is_default_value = True
         self.seeing_is_default_value = True
-        self.Exptime_is_default_value = True
+        self.exptime_is_default_value = True
 
         self.zmin = None
         self.zmax = None
@@ -230,7 +230,7 @@ class TwoDSpec:
 
             self.img = data
             self.logger.info("An numpy array is loaded as data.")
-            self.header = header
+            self.set_header(header)
             self.bad_mask = create_bad_pixel_mask(self.img)[0]
 
         # If it is a fits.hdu.hdulist.HDUList object
@@ -238,9 +238,9 @@ class TwoDSpec:
 
             self.img = data[0].data
             if header is None:
-                self.header = data[0].header
+                self.set_header(data[0].header)
             else:
-                self.header = header
+                self.set_header(header)
             self.bad_mask = create_bad_pixel_mask(self.img)[0]
             self.logger.warning(
                 "An HDU list is provided, only the first " "HDU will be read."
@@ -253,9 +253,9 @@ class TwoDSpec:
 
             self.img = data.data
             if header is None:
-                self.header = data.header
+                self.set_header(data.header)
             else:
-                self.header = header
+                self.set_header(header)
             self.bad_mask = create_bad_pixel_mask(self.img)[0]
             self.logger.info("A PrimaryHDU is loaded as data.")
 
@@ -264,9 +264,9 @@ class TwoDSpec:
 
             self.img = data.data
             if header is None:
-                self.header = data.header
+                self.set_header(data.header)
             else:
-                self.header = header
+                self.set_header(header)
             self.bad_mask = create_bad_pixel_mask(self.img)[0]
             self.logger.info("A CCDData is loaded as data.")
 
@@ -282,10 +282,9 @@ class TwoDSpec:
             self.img = data.image_fits.data
 
             if header is None:
-                self.header = data.image_fits.header
+                self.set_header(data.image_fits.header)
             else:
-                self.header = header
-
+                self.set_header(header)
             if data.arc_main is not None:
 
                 self.arc = data.arc_main
@@ -319,7 +318,7 @@ class TwoDSpec:
             # Load the file and dereference it afterwards
             fitsfile_tmp = fits.open(filepath)[hdunum]
             self.img = copy.deepcopy(fitsfile_tmp.data)
-            self.header = copy.deepcopy(fitsfile_tmp.header)
+            self.set_header(copy.deepcopy(fitsfile_tmp.header))
             logging.info(
                 "Loaded data from: {}, with hdunum: {}".format(
                     filepath, hdunum
@@ -1908,22 +1907,33 @@ class TwoDSpec:
 
         """
 
-        # If it is a fits.hdu.header.Header object
-        if isinstance(header, fits.header.Header):
+        if header is not None:
 
-            self.header = header
+            # If it is a fits.hdu.header.Header object
+            if isinstance(header, fits.header.Header):
 
-        elif isinstance(header[0], fits.header.Header):
+                self.header = header
 
-            self.header = header[0]
+            elif isinstance(header[0], fits.header.Header):
+
+                self.header = header[0]
+
+            else:
+
+                error_msg = (
+                    "Please provide an "
+                    + "astropy.io.fits.header.Header object."
+                )
+                self.logger.critical(error_msg)
+                raise TypeError(error_msg)
 
         else:
 
-            error_msg = (
-                "Please provide an " + "astropy.io.fits.header.Header object."
-            )
-            self.logger.critical(error_msg)
-            raise TypeError(error_msg)
+            self.logger.info('The "header" provided is None. Doing nothing.')
+
+        if self.exptime_is_default_value:
+
+            self.set_exptime()
 
         if self.airmass_is_default_value:
 
@@ -1979,7 +1989,7 @@ class TwoDSpec:
         scaling_max=1.0005,
         scaling_step=0.001,
         percentile=5,
-        shift_tol=10,
+        shift_tol=15,
         fit_deg=3,
         ap_faint=20,
         display=False,
@@ -2113,6 +2123,7 @@ class TwoDSpec:
 
         lines_ref_init = np.nanmedian(img_split[self.start_window_idx], axis=1)
         lines_ref_init[np.isnan(lines_ref_init)] = 0.0
+        lines_ref_init -= np.nanmin(lines_ref_init)
 
         # linear scaling limits
         if rescale:
@@ -2159,14 +2170,20 @@ class TwoDSpec:
             # upsample by the same amount as the reference
             for j, scale in enumerate(scaling_range):
 
-                # Upsampling the reference lines
-                lines_ref_j = spectres(
-                    np.arange(int(nresample * scale)) / scale,
-                    np.arange(len(lines_ref)),
-                    lines_ref,
-                    fill=0.0,
-                    verbose=False,
-                )
+                if scale == 1.0:
+
+                    lines_ref_j = lines_ref
+
+                else:
+
+                    # Upsampling the reference lines
+                    lines_ref_j = spectres(
+                        np.arange(int(nresample * scale)) / scale,
+                        np.arange(len(lines_ref)),
+                        lines_ref,
+                        fill=0.0,
+                        verbose=False,
+                    )
 
                 # find the linear shift
                 corr = signal.correlate(lines_ref_j, lines)
@@ -2234,6 +2251,7 @@ class TwoDSpec:
                 peaks[0][np.argsort(-peaks[1]["prominences"])][
                     : self.nspec_traced
                 ]
+                - self.resample_factor // 2
             )
             / self.resample_factor
         )
@@ -2284,13 +2302,13 @@ class TwoDSpec:
             for j in range(nwindow):
 
                 # rounding
-                idx = int(np.round(self.spec_idx[i][j] + 0.5))
+                idx = int(np.round(self.spec_idx[i][j])) * resample_factor
                 subspec_cleaned = sigma_clip(
                     img_split[j], sigma=3, masked=True
                 ).data
                 ap_val[j] = np.nansum(
-                    np.nansum(subspec_cleaned, axis=1)[idx - 2 : idx + 2]
-                ) / 5 - np.nanmedian(subspec_cleaned)
+                    np.nansum(subspec_cleaned, axis=1)[idx - 3 : idx + 3]
+                ) / 7 - np.nanmedian(subspec_cleaned)
 
             # Mask out the faintest ap_faint percent of trace
             n_faint = int(np.round(len(ap_val) * ap_faint / 100))

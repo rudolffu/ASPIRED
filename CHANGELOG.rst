@@ -16,6 +16,12 @@ Version 0.5.0-dev
   * Using Horne86+Gaussian for optimal extraction now includes aperture correction.
   * Added recompute_continuum when generating sensitivity curve.
 
+* Major bug fixes:
+
+  * `ap_trace` trace suffers from a rounding-like error which is now fixed
+  * `ap_trace` sub-sprectra cleaning was referencing pre-upsampled pixel location instead of the upsampled pixel location
+  * Occasional wrong flux calibration is fixed as the sensitivity function switched to the unit of flux/mag per electron
+
 * Minor bug fixes:
 
   * Fixed a bug that caused some standard star names are never matched
@@ -25,11 +31,13 @@ Version 0.5.0-dev
   * Fixed typo relating to logging of the setting of airmass.
   * Fixed a bug in sorting peaks by prominence
   * Exporting FITS and CSV will check if data exist to avoid outputting empty files.
+  * Header information should be grabbed when data are manually provided.
 
 * (API) changes:
 
   * get_telluric_correction() to get_telluric_strength() as the function only get the multiplication factor to the template telluric absorption profile.
   * `lowess_frac` is used throughout the woftware to denote the `frac` argument for the `lowess()` function.
+  * spectrum1D is now spectrumOneD to avoid confusion with Astropy Specutil spectrum1D
 
 * Other changes:
 
@@ -40,6 +48,33 @@ Version 0.5.0-dev
   * `get_continuum` is now checking input array/list size and throw error if they don't match.
   * OneDSpec and spectrum1D expanded to accommodate wavelength_resampled
   * spectrum1D exapanded to handle atmospheric extinction corrected spectrum as an independent data list
+
+Version 0.4.X
+-------------
+
+* Major bug fixes
+
+  * Fixed a rounding-like error wwhen finding trace.
+  * Fixed a bug leading to wrong background estimation when finding trace.
+
+Version 0.4.6
+-------------
+
+:Date 26-July-2022
+
+* Minor bug fixes
+
+  * Fixed a bug leading to failing in re-creating FITS file in the background when it should.
+
+Version 0.4.5
+-------------
+
+:Date 18-July-2022
+
+* Minor bug fixes
+
+  * Fixed typo relating to logging of the setting of airmass.
+  * Fixed a bug in sorting peaks by prominence
 
 Version 0.4.4
 -------------
